@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+model School {
+  id        String        @id @default(cuid())
+  name      String
+  createdAt DateTime      @default(now())
+  teachers  Teacher[]
+  classes   SchoolClass[]
+}
+
+model Teacher {
+  id           String   @id @default(cuid())
+  schoolId     String
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("TEACHER")
+  createdAt    DateTime @default(now())
+  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+}
+
+model SchoolClass {
+  id        String   @id @default(cuid())
+  schoolId  String
+  name      String
+  section   String
+  createdAt DateTime @default(now())
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  students  Student[]
+  sessions  AttendanceSession[]
+
+  @@unique([schoolId, name, section])
+  @@index([schoolId])
+}
+
+model Student {
+  id           String   @id @default(cuid())
+  classId      String
+  name         String
+  rollNumber   String
+  age          Int?
+  guardianName String?
+  createdAt    DateTime @default(now())
+  class        SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  attendance   AttendanceEntry[]
+
+  @@unique([classId, rollNumber])
+  @@index([classId, name])
+}
+
+model AttendanceSession {
+  id        String   @id @default(cuid())
+  classId   String
+  date      DateTime @db.Date
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  class     SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  entries   AttendanceEntry[]
+
+  @@unique([classId, date])
+  @@index([date])
+}
+
+model AttendanceEntry {
+  id        String           @id @default(cuid())
+  sessionId String
+  studentId String
+  status    AttendanceStatus
+  markedAt  DateTime         @default(now())
+  session   AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId])
+  @@index([studentId, status])
+}
