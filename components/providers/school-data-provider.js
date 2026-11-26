@@ -8,10 +8,11 @@ const SchoolDataContext = createContext(null);
 export function SchoolDataProvider({ children }) {
   const [students, setStudents] = useState(initialStudents);
   const [classes, setClasses] = useState(initialClasses);
+  const [attendance, setAttendance] = useState({});
 
   return (
     <SchoolDataContext.Provider
-      value={{ students, setStudents, classes, setClasses }}
+      value={{ students, setStudents, classes, setClasses, attendance, setAttendance }}
     >
       {children}
     </SchoolDataContext.Provider>
