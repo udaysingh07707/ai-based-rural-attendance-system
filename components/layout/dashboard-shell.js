@@ -1,14 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "./sidebar";
 import Topbar from "./topbar";
 
 export default function DashboardShell({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  useEffect(() => {
+    function handleEscape(event) {
+      if (event.key === "Escape") setSidebarOpen(false);
+    }
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, []);
+
   return (
     <div className="min-h-screen">
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       {sidebarOpen && (
         <button
           type="button"
@@ -23,7 +32,7 @@ export default function DashboardShell({ children }) {
       />
       <div className="min-h-screen md:pl-64">
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-7xl px-4 py-6 focus:outline-none sm:px-6 lg:px-8">
           {children}
         </main>
       </div>

@@ -1,0 +1,11 @@
+{
+  "name": "Rural School Attendance",
+  "short_name": "Attendance",
+  "description": "Offline-capable school attendance workspace",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#1d4ed8",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -1,10 +1,12 @@
 import { Bell, Menu } from "lucide-react";
 import VoiceAssistant from "./voice-assistant";
+import ConnectivityStatus from "../common/connectivity-status";
 
 export default function Topbar({ onMenuClick }) {
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
+        <ConnectivityStatus />
         <VoiceAssistant />
         <button
           type="button"
