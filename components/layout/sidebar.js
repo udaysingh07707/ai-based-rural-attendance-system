@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSchoolData } from "../providers/school-data-provider";
 import {
   BookOpen,
   Camera,
@@ -25,6 +26,7 @@ const navigation = [
 
 export default function Sidebar({ isOpen, onNavigate }) {
   const pathname = usePathname();
+  const { teacher } = useSchoolData();
 
   return (
     <aside
@@ -43,7 +45,7 @@ export default function Sidebar({ isOpen, onNavigate }) {
             <GraduationCap size={21} aria-hidden="true" />
           </span>
           <span>
-            <span className="block text-sm font-bold text-slate-900">School</span>
+          <span className="block max-w-36 truncate text-sm font-bold text-slate-900">{teacher?.school?.name ?? "School"}</span>
             <span className="block text-xs text-slate-500">Attendance</span>
           </span>
         </Link>
@@ -85,9 +87,9 @@ export default function Sidebar({ isOpen, onNavigate }) {
       <div className="border-t border-slate-100 p-4">
         <p className="text-xs font-medium text-slate-500">School account</p>
         <p className="mt-1 truncate text-sm font-semibold text-slate-800">
-          Government Primary School
+          {teacher?.school?.name ?? "School account"}
         </p>
-        <p className="mt-1 text-xs text-slate-500">School name placeholder</p>
+        <p className="mt-1 truncate text-xs text-slate-500">{teacher?.name ?? "Teacher account"}</p>
       </div>
     </aside>
   );

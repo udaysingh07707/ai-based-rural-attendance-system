@@ -17,9 +17,7 @@ export default function ClassAttendance({ classes }) {
       </div>
       <ul className="space-y-5">
         {classes.map((classItem) => {
-          const percentage = Math.round(
-            (classItem.present / classItem.total) * 100,
-          );
+          const percentage = classItem.total ? Math.round((classItem.present / classItem.total) * 100) : 0;
           return (
             <li key={classItem.name}>
               <div className="mb-2 flex items-center justify-between gap-3 text-sm">

@@ -1,6 +1,8 @@
 const statusStyles = {
   Present: "bg-green-50 text-green-700",
   Absent: "bg-red-50 text-red-700",
+  Late: "bg-amber-50 text-amber-800",
+  Excused: "bg-blue-50 text-blue-800",
 };
 
 export default function RecentActivity({ activities }) {
@@ -44,7 +46,7 @@ export default function RecentActivity({ activities }) {
               </span>
             </span>
             <span
-              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${statusStyles[activity.status]}`}
+              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${statusStyles[activity.status] || "bg-slate-100 text-slate-700"}`}
             >
               {activity.status}
             </span>

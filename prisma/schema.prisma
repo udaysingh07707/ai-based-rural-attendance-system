@@ -14,6 +14,11 @@ enum AttendanceStatus {
   EXCUSED
 }
 
+enum OtpPurpose {
+  SIGNUP
+  LOGIN
+}
+
 model School {
   id        String        @id @default(cuid())
   name      String
@@ -26,11 +31,38 @@ model Teacher {
   id           String   @id @default(cuid())
   schoolId     String
   name         String
+  firstName    String?
+  lastName     String?
   email        String   @unique
-  passwordHash String
+  passwordHash String?
+  emailVerifiedAt DateTime?
   role         String   @default("TEACHER")
   createdAt    DateTime @default(now())
   school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+}
+
+model EmailOtp {
+  email      String     @id
+  codeHash   String
+  purpose    OtpPurpose
+  firstName  String?
+  lastName   String?
+  schoolName String?
+  passwordHash String?
+  expiresAt  DateTime
+  attempts   Int        @default(0)
+  createdAt  DateTime   @default(now())
+
+  @@index([expiresAt])
+}
+
+model LoginRateLimit {
+  key        String
+  windowStart DateTime
+  attempts   Int      @default(1)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
 }
 
 model SchoolClass {
@@ -38,6 +70,7 @@ model SchoolClass {
   schoolId  String
   name      String
   section   String
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   students  Student[]
@@ -54,6 +87,7 @@ model Student {
   rollNumber   String
   age          Int?
   guardianName String?
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   class        SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
   attendance   AttendanceEntry[]

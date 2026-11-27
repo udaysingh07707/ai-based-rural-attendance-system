@@ -1,28 +1,25 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, UserPlus } from "lucide-react";
+import { LoaderCircle, RefreshCw, Search, UserPlus } from "lucide-react";
 import StudentCard from "../../components/students/student-card";
 import StudentForm from "../../components/students/student-form";
 import Modal from "../../components/common/modal";
 import DashboardShell from "../../components/layout/dashboard-shell";
 import { useSchoolData } from "../../components/providers/school-data-provider";
 
-function getNextStudentId(students) {
-  const highestId = students.reduce((highest, student) => {
-    const number = Number(student.id.replace("STU-", ""));
-    return Number.isFinite(number) ? Math.max(highest, number) : highest;
-  }, 0);
-  return `STU-${String(highestId + 1).padStart(3, "0")}`;
-}
-
 export default function StudentsPage() {
-  const { students, setStudents, classes } = useSchoolData();
+  const { students, classes, hydrated, dataError, reload, createStudent, updateStudent, deleteStudent: removeStudent } = useSchoolData();
   const [query, setQuery] = useState("");
   const [classFilter, setClassFilter] = useState("all");
   const [dialog, setDialog] = useState(null);
   const [formError, setFormError] = useState("");
-  const nextId = getNextStudentId(students);
+  const [page, setPage] = useState(0);
+
+  const classLabels = useMemo(
+    () => new Map(classes.map((item) => [item.id, `${item.name} - ${item.section}`])),
+    [classes],
+  );
 
   const visibleStudents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -37,17 +34,17 @@ export default function StudentsPage() {
     });
   }, [students, query, classFilter]);
 
-  function getClassLabel(classId) {
-    const classItem = classes.find((item) => item.id === classId);
-    return classItem ? `${classItem.name} - ${classItem.section}` : "Unassigned";
-  }
+  const pageSize = 48;
+  const pageCount = Math.ceil(visibleStudents.length / pageSize);
+  const pageStudents = visibleStudents.slice(page * pageSize, (page + 1) * pageSize);
+  const getClassLabel = (classId) => classLabels.get(classId) ?? "Unassigned";
 
   function openForm(student = null) {
     setFormError("");
     setDialog({ type: student ? "edit" : "add", student });
   }
 
-  function saveStudent(event) {
+  async function saveStudent(event) {
     event.preventDefault();
     setFormError("");
     const formData = new FormData(event.currentTarget);
@@ -81,31 +78,19 @@ export default function StudentsPage() {
       guardianName,
     };
 
-    if (dialog.type === "edit") {
-      setStudents((current) =>
-        current.map((student) =>
-          student.id === dialog.student.id
-            ? { ...student, ...studentDetails }
-            : student,
-        ),
-      );
-    } else {
-      setStudents((current) => [
-        { id: nextId, ...studentDetails },
-        ...current,
-      ]);
-    }
-    setDialog(null);
+    try {
+      if (dialog.type === "edit") await updateStudent(dialog.student.id, studentDetails);
+      else await createStudent(studentDetails);
+      setDialog(null);
+    } catch (error) { setFormError(error.message); }
   }
 
   function deleteStudent(student) {
     const confirmed = window.confirm(
-      `Delete ${student.name} (${student.id}) from the student list?`,
+      `Archive ${student.name} (${student.id})? Their historical attendance will be preserved.`,
     );
     if (confirmed) {
-      setStudents((current) =>
-        current.filter((item) => item.id !== student.id),
-      );
+      removeStudent(student.id).catch((error) => window.alert(error.message));
     }
   }
 
@@ -149,7 +134,10 @@ export default function StudentsPage() {
             <input
               type="search"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setPage(0);
+                setQuery(event.target.value);
+              }}
               placeholder="Search by name, student ID, or roll number"
               className="min-h-11 w-full rounded-lg border border-slate-300 pl-10 pr-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
             />
@@ -158,7 +146,10 @@ export default function StudentsPage() {
             <span className="sr-only">Filter by class</span>
             <select
               value={classFilter}
-              onChange={(event) => setClassFilter(event.target.value)}
+              onChange={(event) => {
+                setPage(0);
+                setClassFilter(event.target.value);
+              }}
               className="min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
             >
               <option value="all">All classes</option>
@@ -176,12 +167,24 @@ export default function StudentsPage() {
             {visibleStudents.length}{" "}
             {visibleStudents.length === 1 ? "student" : "students"}
           </p>
-          <p className="text-xs text-slate-500">Sample records</p>
+          <p className="text-xs text-slate-500">Saved to your school database</p>
         </div>
 
-        {visibleStudents.length > 0 ? (
+        {!hydrated ? (
+          <div role="status" className="flex min-h-32 items-center justify-center gap-2 text-sm text-slate-600">
+            <LoaderCircle size={18} className="animate-spin text-brand-600" />
+            Loading students…
+          </div>
+        ) : dataError ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-8 text-center">
+            <p className="text-sm text-amber-900">Student records could not be loaded.</p>
+            <button type="button" onClick={() => reload().catch(() => {})} className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+              <RefreshCw size={15} /> Retry
+            </button>
+          </div>
+        ) : visibleStudents.length > 0 ? (
           <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {visibleStudents.map((student) => (
+            {pageStudents.map((student) => (
               <li key={student.id}>
                 <StudentCard
                   student={student}
@@ -203,6 +206,7 @@ export default function StudentsPage() {
               <button
                 type="button"
                 onClick={() => {
+                  setPage(0);
                   setQuery("");
                   setClassFilter("all");
                 }}
@@ -213,13 +217,23 @@ export default function StudentsPage() {
             )}
           </div>
         )}
+
+        {hydrated && !dataError && pageCount > 1 && (
+          <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm">
+            <span className="text-slate-500">Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, visibleStudents.length)} of {visibleStudents.length}</span>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page === 0} className="min-h-9 rounded-lg border border-slate-300 px-3 font-medium text-slate-700 disabled:opacity-50">Previous</button>
+              <button type="button" onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))} disabled={page >= pageCount - 1} className="min-h-9 rounded-lg border border-slate-300 px-3 font-medium text-slate-700 disabled:opacity-50">Next</button>
+            </div>
+          </div>
+        )}
       </section>
 
       {dialog?.type !== "view" && dialog && (
         <Modal
           key={dialog.type}
           title={dialog.type === "edit" ? "Edit student" : "Add student"}
-          description="Student records are demo data and are not saved to a server."
+          description="Student details are saved to your school database."
           onClose={() => setDialog(null)}
         >
           {formError && (
@@ -230,7 +244,7 @@ export default function StudentsPage() {
           <StudentForm
             student={selectedStudent}
             classes={classes}
-            nextId={nextId}
+            nextId="assigned automatically"
             onSubmit={saveStudent}
             onCancel={() => setDialog(null)}
           />
@@ -241,7 +255,7 @@ export default function StudentsPage() {
         <Modal
           key="student-details"
           title="Student details"
-          description="Sample student record."
+          description="Student information saved in your school directory."
           onClose={() => setDialog(null)}
         >
           <div className="flex items-center gap-4">

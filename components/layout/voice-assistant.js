@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AudioLines, Mic, MicOff, X } from "lucide-react";
+import {
+  readSettingsPreferences,
+  SETTINGS_PREFERENCES_EVENT,
+  writeSettingsPreferences,
+} from "../settings/settings-preferences";
 
 const COMMANDS = [
   { label: "Open dashboard", hindi: "डैशबोर्ड खोलो", phrases: ["open dashboard", "show dashboard", "डैशबोर्ड खोलो", "डैशबोर्ड दिखाओ"], href: "/dashboard" },
@@ -22,7 +27,7 @@ export default function VoiceAssistant() {
   const recognitionRef = useRef(null);
   const dialogRef = useRef(null);
   const [open, setOpen] = useState(false);
-  const [language, setLanguage] = useState("en-IN");
+  const [preferences, setPreferences] = useState({ language: "en-IN", voiceAssistantEnabled: true });
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [message, setMessage] = useState("");
@@ -31,6 +36,25 @@ export default function VoiceAssistant() {
   useEffect(() => {
     setSupported(typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition));
     return () => recognitionRef.current?.stop();
+  }, []);
+
+  useEffect(() => {
+    const refreshPreferences = () => {
+      const next = readSettingsPreferences();
+      setPreferences(next);
+      if (!next.voiceAssistantEnabled) {
+        recognitionRef.current?.stop();
+        setListening(false);
+        setOpen(false);
+      }
+    };
+    refreshPreferences();
+    window.addEventListener(SETTINGS_PREFERENCES_EVENT, refreshPreferences);
+    window.addEventListener("storage", refreshPreferences);
+    return () => {
+      window.removeEventListener(SETTINGS_PREFERENCES_EVENT, refreshPreferences);
+      window.removeEventListener("storage", refreshPreferences);
+    };
   }, []);
 
   useEffect(() => {
@@ -72,7 +96,7 @@ export default function VoiceAssistant() {
     if (!Recognition) { setSupported(false); return; }
     recognitionRef.current?.stop();
     const recognition = new Recognition();
-    recognition.lang = language;
+    recognition.lang = preferences.language;
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
@@ -87,12 +111,20 @@ export default function VoiceAssistant() {
     try { recognition.start(); } catch { setListening(false); setMessage("Voice input is already active. Please try again in a moment."); }
   }
 
+  if (!preferences.voiceAssistantEnabled) return null;
+
+  function changeLanguage(language) {
+    const next = { ...readSettingsPreferences(), language };
+    setPreferences(next);
+    writeSettingsPreferences(next);
+  }
+
   return <>
     <button type="button" onClick={() => { setOpen(true); setMessage(""); }} aria-haspopup="dialog" aria-label="Open voice assistant" title="Voice assistant" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"><AudioLines size={18} aria-hidden="true" /><span className="hidden sm:inline">Voice assistant</span></button>
     {open && <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 p-0 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
       <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="voice-assistant-title" className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl sm:p-6">
         <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-wide text-brand-700">English and Hindi</p><h2 id="voice-assistant-title" className="mt-1 text-xl font-bold text-slate-900">Voice assistant</h2><p className="mt-1 text-sm text-slate-600">Say a command to open a section of your workspace.</p></div><button type="button" onClick={close} aria-label="Close voice assistant" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X size={19} /></button></div>
-        <label className="mt-5 block text-sm font-medium text-slate-700">Spoken language<select value={language} onChange={(event) => setLanguage(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"><option value="en-IN">English (India)</option><option value="hi-IN">हिन्दी (भारत)</option></select></label>
+        <label className="mt-5 block text-sm font-medium text-slate-700">Spoken language<select value={preferences.language} onChange={(event) => changeLanguage(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"><option value="en-IN">English (India)</option><option value="hi-IN">हिन्दी (भारत)</option></select></label>
         <div className="mt-4 rounded-xl bg-slate-50 p-4"><div className="flex min-h-12 items-center gap-3"><button type="button" onClick={listening ? stopListening : startListening} disabled={!supported} className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white transition-colors ${listening ? "animate-pulse bg-rose-600 hover:bg-rose-700" : "bg-brand-600 hover:bg-brand-700"} disabled:cursor-not-allowed disabled:bg-slate-400`} aria-label={listening ? "Stop listening" : "Start voice command"}>{listening ? <MicOff size={21} /> : <Mic size={21} />}</button><div aria-live="polite"><p className="text-sm font-semibold text-slate-900">{listening ? "Listening for a command" : transcript ? `Heard: “${transcript}”` : "Tap the microphone to speak"}</p><p className="mt-1 text-xs text-slate-500">{message || "Microphone permission may be requested by your browser."}</p></div></div>
           {!supported && <p className="mt-3 text-sm text-rose-700">Voice recognition isn’t supported in this browser. Try a recent version of Chrome.</p>}
         </div>

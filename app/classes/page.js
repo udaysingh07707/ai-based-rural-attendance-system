@@ -2,22 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BookOpen, Pencil, Plus, Users } from "lucide-react";
+import { Archive, BookOpen, Pencil, Plus, Users } from "lucide-react";
 import ClassForm from "../../components/classes/class-form";
 import Modal from "../../components/common/modal";
 import DashboardShell from "../../components/layout/dashboard-shell";
 import { useSchoolData } from "../../components/providers/school-data-provider";
 
-function getNextClassId(classes) {
-  const highestId = classes.reduce((highest, classItem) => {
-    const match = classItem.id.match(/^class-(\d+)$/);
-    return match ? Math.max(highest, Number(match[1])) : highest;
-  }, 0);
-  return `class-${highestId + 1}`;
-}
-
 export default function ClassesPage() {
-  const { classes, setClasses, students } = useSchoolData();
+  const { classes, createClass, updateClass, deleteClass, students } = useSchoolData();
   const [dialog, setDialog] = useState(null);
   const [formError, setFormError] = useState("");
 
@@ -26,7 +18,7 @@ export default function ClassesPage() {
     setDialog({ type: classItem ? "edit" : "add", classItem });
   }
 
-  function saveClass(event) {
+  async function saveClass(event) {
     event.preventDefault();
     setFormError("");
     const formData = new FormData(event.currentTarget);
@@ -49,21 +41,18 @@ export default function ClassesPage() {
       return;
     }
 
-    if (dialog.type === "edit") {
-      setClasses((current) =>
-        current.map((item) =>
-          item.id === dialog.classItem.id
-            ? { ...item, name, section }
-            : item,
-        ),
-      );
-    } else {
-      setClasses((current) => [
-        ...current,
-        { id: getNextClassId(current), name, section },
-      ]);
-    }
-    setDialog(null);
+    try {
+      if (dialog.type === "edit") await updateClass(dialog.classItem.id, { name, section });
+      else await createClass({ name, section });
+      setDialog(null);
+    } catch (error) { setFormError(error.message); }
+  }
+
+  async function archiveClass(classItem) {
+    const confirmed = window.confirm(`Archive ${classItem.name} - Section ${classItem.section}? Its attendance history will be preserved.`);
+    if (!confirmed) return;
+    try { await deleteClass(classItem.id); }
+    catch (error) { window.alert(error.message || "Could not archive this class."); }
   }
 
   const selectedClass = dialog?.classItem;
@@ -98,7 +87,7 @@ export default function ClassesPage() {
           <p className="font-medium text-slate-700">
             {classes.length} {classes.length === 1 ? "class" : "classes"}
           </p>
-          <p className="text-xs text-slate-500">Sample records</p>
+          <p className="text-xs text-slate-500">Saved to your school database</p>
         </div>
 
         {classes.length > 0 ? (
@@ -114,14 +103,10 @@ export default function ClassesPage() {
                       <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
                         <BookOpen size={21} aria-hidden="true" />
                       </span>
-                      <button
-                        type="button"
-                        onClick={() => openForm(classItem)}
-                        aria-label={`Edit ${classItem.name}, section ${classItem.section}`}
-                        className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-brand-700"
-                      >
-                        <Pencil size={17} aria-hidden="true" />
-                      </button>
+                      <div className="flex gap-1">
+                        <button type="button" onClick={() => openForm(classItem)} aria-label={`Edit ${classItem.name}, section ${classItem.section}`} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-brand-700"><Pencil size={17} aria-hidden="true" /></button>
+                        <button type="button" onClick={() => archiveClass(classItem)} aria-label={`Archive ${classItem.name}, section ${classItem.section}`} className="rounded-lg p-2 text-slate-500 hover:bg-amber-50 hover:text-amber-800"><Archive size={17} aria-hidden="true" /></button>
+                      </div>
                     </div>
                     <h2 className="mt-4 text-lg font-semibold text-slate-900">
                       {classItem.name}
@@ -169,7 +154,7 @@ export default function ClassesPage() {
         <Modal
           key={dialog.type}
           title={dialog.type === "edit" ? "Edit class" : "Add class"}
-          description="Class information is sample data and is not saved to a server."
+          description="Class information is saved to your school database."
           onClose={() => setDialog(null)}
         >
           {formError && (
@@ -191,7 +176,7 @@ export default function ClassesPage() {
           title={`${selectedClass.name} - Section ${selectedClass.section}`}
           description={`${selectedStudents.length} ${
             selectedStudents.length === 1 ? "student" : "students"
-          } in this sample class.`}
+          } in this class.`}
           onClose={() => setDialog(null)}
         >
           {selectedStudents.length > 0 ? (
