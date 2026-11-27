@@ -4,3 +4,5 @@ out/
 *.log
 .env*
 !.env.example
+face_service/models/*.onnx
+face_service/models/*.download

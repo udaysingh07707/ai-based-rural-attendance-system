@@ -8,10 +8,11 @@ async function request(url, method, data, timeoutMs = 10000) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const isFormData = typeof FormData !== "undefined" && data instanceof FormData;
     const response = await fetch(url, {
       method,
-      headers: data ? { "Content-Type": "application/json" } : undefined,
-      body: data ? JSON.stringify(data) : undefined,
+      headers: data && !isFormData ? { "Content-Type": "application/json" } : undefined,
+      body: data ? (isFormData ? data : JSON.stringify(data)) : undefined,
       signal: controller.signal,
     });
     const result = await response.json().catch(() => ({}));

@@ -20,89 +20,154 @@ enum OtpPurpose {
 }
 
 model School {
-  id        String        @id @default(cuid())
-  name      String
-  createdAt DateTime      @default(now())
-  teachers  Teacher[]
-  classes   SchoolClass[]
+  id           String        @id @default(cuid())
+  name         String
+  createdAt    DateTime      @default(now())
+  teachers     Teacher[]
+  classes      SchoolClass[]
+  faceConsents FaceConsent[]
 }
 
 model Teacher {
-  id           String   @id @default(cuid())
-  schoolId     String
-  name         String
-  firstName    String?
-  lastName     String?
-  email        String   @unique
-  passwordHash String?
-  emailVerifiedAt DateTime?
-  role         String   @default("TEACHER")
-  createdAt    DateTime @default(now())
-  school       School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  id                   String        @id @default(cuid())
+  schoolId             String
+  name                 String
+  firstName            String?
+  lastName             String?
+  email                String        @unique
+  googleId             String?       @unique
+  passwordHash         String?
+  emailVerifiedAt      DateTime?
+  role                 String        @default("TEACHER")
+  createdAt            DateTime      @default(now())
+  school               School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  recordedFaceConsents FaceConsent[]
 }
 
 model EmailOtp {
-  email      String     @id
-  codeHash   String
-  purpose    OtpPurpose
-  firstName  String?
-  lastName   String?
-  schoolName String?
+  email        String     @id
+  codeHash     String
+  purpose      OtpPurpose
+  firstName    String?
+  lastName     String?
+  schoolName   String?
   passwordHash String?
-  expiresAt  DateTime
-  attempts   Int        @default(0)
-  createdAt  DateTime   @default(now())
+  expiresAt    DateTime
+  attempts     Int        @default(0)
+  createdAt    DateTime   @default(now())
 
   @@index([expiresAt])
 }
 
 model LoginRateLimit {
-  key        String
+  key         String
   windowStart DateTime
-  attempts   Int      @default(1)
+  attempts    Int      @default(1)
 
   @@id([key, windowStart])
   @@index([windowStart])
 }
 
 model SchoolClass {
-  id        String   @id @default(cuid())
-  schoolId  String
-  name      String
-  section   String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  students  Student[]
-  sessions  AttendanceSession[]
+  id           String              @id @default(cuid())
+  schoolId     String
+  name         String
+  section      String
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  school       School              @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  students     Student[]
+  faceConsents FaceConsent[]
+  sessions     AttendanceSession[]
 
   @@unique([schoolId, name, section])
+  @@unique([id, schoolId])
   @@index([schoolId])
 }
 
 model Student {
-  id           String   @id @default(cuid())
+  id           String               @id @default(cuid())
   classId      String
   name         String
   rollNumber   String
   age          Int?
   guardianName String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  class        SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  isActive     Boolean              @default(true)
+  createdAt    DateTime             @default(now())
+  class        SchoolClass          @relation(fields: [classId], references: [id], onDelete: Cascade)
   attendance   AttendanceEntry[]
+  profilePhoto StudentPhoto?
+  faceConsents FaceConsent[]
+  faceTemplate StudentFaceTemplate?
 
+  @@unique([id, classId])
   @@unique([classId, rollNumber])
   @@index([classId, name])
 }
 
+// Profile photos are ordinary student directory images. They are kept separate
+// from any future biometric enrollment data and are never returned in list APIs.
+model StudentPhoto {
+  studentId   String   @id
+  contentType String   @default("image/jpeg")
+  imageBytes  Bytes
+  updatedAt   DateTime @updatedAt
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+// Consent is explicit, auditable, and never inferred from a profile photo.
+model FaceConsent {
+  id                   String               @id @default(cuid())
+  studentId            String
+  activeStudentId      String?              @unique
+  classId              String
+  schoolId             String
+  recordedByTeacherId  String
+  guardianName         String
+  guardianRelationship String
+  consentReference     String
+  consentVersion       String
+  grantedAt            DateTime             @default(now())
+  revokedAt            DateTime?
+  student              Student              @relation(fields: [studentId, classId], references: [id, classId], onDelete: Cascade)
+  schoolClass          SchoolClass          @relation(fields: [classId, schoolId], references: [id, schoolId], onDelete: Cascade)
+  school               School               @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  recordedBy           Teacher              @relation(fields: [recordedByTeacherId], references: [id], onDelete: Restrict)
+  activeStudent        FaceConsent?         @relation("ActiveConsentStudentIdentity", fields: [activeStudentId, id], references: [studentId, id], onDelete: NoAction, onUpdate: Cascade)
+  activeConsentRows    FaceConsent[]        @relation("ActiveConsentStudentIdentity")
+  template             StudentFaceTemplate?
+
+  @@unique([studentId, id])
+  @@unique([id, studentId])
+  @@index([studentId, schoolId, grantedAt])
+  @@index([schoolId, revokedAt])
+}
+
+// Only authenticated, encrypted embeddings are stored here, never face crops.
+model StudentFaceTemplate {
+  studentId             String      @id
+  consentId             String      @unique
+  ciphertext            Bytes
+  nonce                 Bytes
+  authTag               Bytes
+  keyVersion            String
+  modelVersion          String
+  profilePhotoUpdatedAt DateTime
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  student               Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  consent               FaceConsent @relation(fields: [consentId, studentId], references: [id, studentId], onDelete: Cascade)
+
+  @@unique([consentId, studentId])
+}
+
 model AttendanceSession {
-  id        String   @id @default(cuid())
+  id        String            @id @default(cuid())
   classId   String
-  date      DateTime @db.Date
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  class     SchoolClass @relation(fields: [classId], references: [id], onDelete: Cascade)
+  date      DateTime          @db.Date
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  class     SchoolClass       @relation(fields: [classId], references: [id], onDelete: Cascade)
   entries   AttendanceEntry[]
 
   @@unique([classId, date])
@@ -110,13 +175,13 @@ model AttendanceSession {
 }
 
 model AttendanceEntry {
-  id        String           @id @default(cuid())
+  id        String            @id @default(cuid())
   sessionId String
   studentId String
   status    AttendanceStatus
-  markedAt  DateTime         @default(now())
+  markedAt  DateTime          @default(now())
   session   AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, studentId])
   @@index([studentId, status])

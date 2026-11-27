@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { LoaderCircle, RefreshCw, Search, UserPlus } from "lucide-react";
 import StudentCard from "../../components/students/student-card";
 import StudentForm from "../../components/students/student-form";
+import FaceEnrollmentPanel from "../../components/students/face-enrollment-panel";
 import Modal from "../../components/common/modal";
 import DashboardShell from "../../components/layout/dashboard-shell";
 import { useSchoolData } from "../../components/providers/school-data-provider";
@@ -14,6 +15,7 @@ export default function StudentsPage() {
   const [classFilter, setClassFilter] = useState("all");
   const [dialog, setDialog] = useState(null);
   const [formError, setFormError] = useState("");
+  const [pendingEnrollment, setPendingEnrollment] = useState(null);
   const [page, setPage] = useState(0);
 
   const classLabels = useMemo(
@@ -41,7 +43,18 @@ export default function StudentsPage() {
 
   function openForm(student = null) {
     setFormError("");
+    if (!student || pendingEnrollment?.studentId !== student.id) setPendingEnrollment(null);
     setDialog({ type: student ? "edit" : "add", student });
+  }
+
+  function closeDialog() {
+    setDialog(null);
+    setPendingEnrollment(null);
+  }
+
+  function viewStudent(student) {
+    if (pendingEnrollment?.studentId !== student.id) setPendingEnrollment(null);
+    setDialog({ type: "view", student });
   }
 
   async function saveStudent(event) {
@@ -53,6 +66,13 @@ export default function StudentsPage() {
     const rollNumber = String(formData.get("rollNumber") ?? "").trim();
     const age = Number(formData.get("age"));
     const guardianName = String(formData.get("guardianName") ?? "").trim();
+    const selectedEnrollmentPhoto = formData.get("enrollmentPhoto");
+    const enrollmentPhoto = selectedEnrollmentPhoto && selectedEnrollmentPhoto.size > 0 ? selectedEnrollmentPhoto : null;
+    const alsoSaveProfilePhoto = formData.get("saveAsProfilePhoto") === "true";
+    formData.delete("enrollmentPhoto");
+    formData.delete("saveAsProfilePhoto");
+    if (enrollmentPhoto && alsoSaveProfilePhoto) formData.set("profilePhoto", enrollmentPhoto);
+    else formData.delete("profilePhoto");
 
     if (!name || !classId || !rollNumber || !guardianName || !Number.isInteger(age)) {
       setFormError("Complete all fields with valid student details.");
@@ -70,18 +90,14 @@ export default function StudentsPage() {
       return;
     }
 
-    const studentDetails = {
-      name,
-      classId,
-      rollNumber,
-      age,
-      guardianName,
-    };
-
     try {
-      if (dialog.type === "edit") await updateStudent(dialog.student.id, studentDetails);
-      else await createStudent(studentDetails);
-      setDialog(null);
+      const savedStudent = dialog.type === "edit"
+        ? await updateStudent(dialog.student.id, formData)
+        : await createStudent(formData);
+      const photoForEnrollment = enrollmentPhoto || (pendingEnrollment?.studentId === savedStudent.id ? pendingEnrollment.file : null);
+      setPendingEnrollment(photoForEnrollment ? { studentId: savedStudent.id, file: photoForEnrollment } : null);
+      if (photoForEnrollment) setDialog({ type: "view", student: savedStudent });
+      else setDialog(null);
     } catch (error) { setFormError(error.message); }
   }
 
@@ -189,7 +205,7 @@ export default function StudentsPage() {
                 <StudentCard
                   student={student}
                   classLabel={getClassLabel(student.classId)}
-                  onView={() => setDialog({ type: "view", student })}
+                  onView={() => viewStudent(student)}
                   onEdit={() => openForm(student)}
                   onDelete={() => deleteStudent(student)}
                 />
@@ -234,7 +250,7 @@ export default function StudentsPage() {
           key={dialog.type}
           title={dialog.type === "edit" ? "Edit student" : "Add student"}
           description="Student details are saved to your school database."
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
         >
           {formError && (
             <p role="alert" className="mb-4 text-sm font-medium text-red-700">
@@ -242,11 +258,12 @@ export default function StudentsPage() {
             </p>
           )}
           <StudentForm
+            key={selectedStudent?.id ?? "new-student"}
             student={selectedStudent}
             classes={classes}
             nextId="assigned automatically"
             onSubmit={saveStudent}
-            onCancel={() => setDialog(null)}
+            onCancel={closeDialog}
           />
         </Modal>
       )}
@@ -256,7 +273,7 @@ export default function StudentsPage() {
           key="student-details"
           title="Student details"
           description="Student information saved in your school directory."
-          onClose={() => setDialog(null)}
+          onClose={closeDialog}
         >
           <div className="flex items-center gap-4">
             <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-50 text-base font-semibold text-brand-700">
@@ -300,10 +317,16 @@ export default function StudentsPage() {
               </dd>
             </div>
           </dl>
+          <FaceEnrollmentPanel
+            key={`face-enrollment-${selectedStudent.id}`}
+            student={selectedStudent}
+            initialPhoto={pendingEnrollment?.studentId === selectedStudent.id ? pendingEnrollment.file : null}
+            onPhotoConsumed={() => setPendingEnrollment(null)}
+          />
           <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-4">
             <button
               type="button"
-              onClick={() => setDialog(null)}
+              onClick={closeDialog}
               className="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               Close

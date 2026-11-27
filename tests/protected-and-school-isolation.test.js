@@ -4,6 +4,9 @@ const mocks = vi.hoisted(() => ({
   db: {
     schoolClass: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
     student: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), deleteMany: vi.fn() },
+    studentPhoto: { create: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn(), findUnique: vi.fn() },
+    faceConsent: { updateMany: vi.fn() },
+    studentFaceTemplate: { upsert: vi.fn(), deleteMany: vi.fn(), findUnique: vi.fn() },
     attendanceSession: { findMany: vi.fn() },
     attendanceEntry: { upsert: vi.fn() },
     emailOtp: { findMany: vi.fn() },
@@ -48,14 +51,37 @@ beforeEach(() => {
   mocks.db.student.updateMany.mockResolvedValue({ count: 1 });
   mocks.db.student.findUnique.mockResolvedValue({ id: "student-a", ...validStudent({ name: "Updated Name" }) });
   mocks.db.student.deleteMany.mockResolvedValue({ count: 1 });
+  mocks.db.studentPhoto.create.mockResolvedValue({});
+  mocks.db.studentPhoto.upsert.mockResolvedValue({});
+  mocks.db.studentPhoto.deleteMany.mockResolvedValue({ count: 1 });
+  mocks.db.studentPhoto.findUnique.mockResolvedValue(null);
+  mocks.db.faceConsent.updateMany.mockResolvedValue({ count: 1 });
+  mocks.db.studentFaceTemplate.deleteMany.mockResolvedValue({ count: 0 });
   mocks.db.student.findMany.mockResolvedValue([{ id: "student-a" }, { id: "student-b" }]);
   mocks.db.attendanceSession.findMany.mockResolvedValue([]);
   mocks.db.attendanceEntry.upsert.mockResolvedValue({});
   mocks.db.$transaction.mockImplementation(async (callback) => callback({
+    $queryRaw: vi.fn().mockResolvedValue([{ id: "consent-a" }]),
     attendanceSession: { upsert: vi.fn().mockResolvedValue({ id: "session-a" }) },
     attendanceEntry: { upsert: mocks.db.attendanceEntry.upsert },
     schoolClass: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-    student: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+    student: {
+      create: mocks.db.student.create,
+      updateMany: mocks.db.student.updateMany,
+      findUnique: mocks.db.student.findUnique,
+    },
+    studentPhoto: {
+      create: mocks.db.studentPhoto.create,
+      upsert: mocks.db.studentPhoto.upsert,
+      deleteMany: mocks.db.studentPhoto.deleteMany,
+      findUnique: mocks.db.studentPhoto.findUnique,
+    },
+    studentFaceTemplate: {
+      upsert: mocks.db.studentFaceTemplate.upsert,
+      deleteMany: mocks.db.studentFaceTemplate.deleteMany,
+      findUnique: mocks.db.studentFaceTemplate.findUnique,
+    },
+    faceConsent: { updateMany: mocks.db.faceConsent.updateMany },
   }));
 });
 
@@ -143,6 +169,22 @@ describe("student and class CRUD handlers", () => {
     expect(await response.json()).toMatchObject({ ok: true, archived: true });
     expect(mocks.db.$transaction).toHaveBeenCalledOnce();
     expect(mocks.db.student.deleteMany).not.toHaveBeenCalled();
+    expect(mocks.db.faceConsent.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { classId: "class-a", schoolId: "school-a", activeStudentId: { not: null }, revokedAt: null },
+      data: expect.objectContaining({ activeStudentId: null, revokedAt: expect.any(Date) }),
+    }));
+    expect(mocks.db.studentFaceTemplate.deleteMany).toHaveBeenCalledWith({ where: { student: { classId: "class-a" } } });
+  });
+
+  it("revokes active face consent and removes its template when a student is archived", async () => {
+    const response = await deleteStudent(request({}), { params: Promise.resolve({ id: "student-a" }) });
+    expect(response.status).toBe(200);
+    expect(mocks.db.faceConsent.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { studentId: "student-a", schoolId: "school-a", activeStudentId: "student-a", revokedAt: null },
+      data: expect.objectContaining({ activeStudentId: null, revokedAt: expect.any(Date) }),
+    }));
+    expect(mocks.db.studentFaceTemplate.deleteMany).toHaveBeenCalledWith({ where: { studentId: "student-a" } });
+    expect(mocks.db.studentPhoto.deleteMany).not.toHaveBeenCalled();
   });
 });
 

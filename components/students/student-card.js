@@ -1,4 +1,5 @@
 import { Eye, Pencil, Trash2 } from "lucide-react";
+import Image from "next/image";
 
 export default function StudentCard({
   student,
@@ -17,12 +18,23 @@ export default function StudentCard({
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-card sm:p-5">
       <div className="flex items-start gap-3">
-        <span
-          aria-label={`${student.name} profile photo placeholder`}
-          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700"
-        >
-          {initials}
-        </span>
+        {student.hasProfilePhoto ? (
+          <Image
+            src={`/api/students/${encodeURIComponent(student.id)}/photo`}
+            alt={`${student.name} profile photo`}
+            width={48}
+            height={48}
+            unoptimized
+            className="h-12 w-12 shrink-0 rounded-full border border-slate-200 object-cover"
+          />
+        ) : (
+          <span
+            aria-label={`${student.name} initials`}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-700"
+          >
+            {initials}
+          </span>
+        )}
         <div className="min-w-0 flex-1">
           <h2 className="truncate font-semibold text-slate-900">{student.name}</h2>
           <p className="mt-1 text-xs text-slate-500">{student.id}</p>

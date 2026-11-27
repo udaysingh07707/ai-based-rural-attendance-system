@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const [classes, students, sessions] = await Promise.all([
       db.schoolClass.findMany({ where: { schoolId: teacher.schoolId, isActive: true }, orderBy: [{ name: "asc" }, { section: "asc" }] }),
-      db.student.findMany({ where: { isActive: true, class: { schoolId: teacher.schoolId, isActive: true } }, orderBy: [{ name: "asc" }] }),
+      db.student.findMany({ where: { isActive: true, class: { schoolId: teacher.schoolId, isActive: true } }, orderBy: [{ name: "asc" }], include: { profilePhoto: { select: { studentId: true } } } }),
       db.attendanceSession.findMany({ where: { class: { schoolId: teacher.schoolId } }, include: { entries: true } }),
     ]);
     const attendance = {};
@@ -16,7 +16,7 @@ export async function GET() {
       const date = session.date.toISOString().slice(0, 10);
       attendance[`${date}:${session.classId}`] = Object.fromEntries(session.entries.map((entry) => [entry.studentId, entry.status.toLowerCase()]));
     }
-    return NextResponse.json({ classes, students, attendance });
+    return NextResponse.json({ classes, students: students.map(({ profilePhoto, ...student }) => ({ ...student, hasProfilePhoto: Boolean(profilePhoto) })), attendance });
   } catch (error) {
     console.error("Loading school data failed", error);
     return NextResponse.json({ error: "Could not load school data." }, { status: 500 });

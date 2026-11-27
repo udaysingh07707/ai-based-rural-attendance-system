@@ -28,9 +28,23 @@ export async function DELETE(_request, { params }) {
   const { id } = await params;
   try {
     const archived = await db.$transaction(async (tx) => {
+      // Lock affected consent rows in a stable order before archiving students,
+      // using the same consent-first order as enrollment and revocation.
+      await tx.$queryRaw`
+        SELECT "id"
+        FROM "FaceConsent"
+        WHERE "classId" = ${id}
+          AND "schoolId" = ${teacher.schoolId}
+          AND "activeStudentId" IS NOT NULL
+          AND "revokedAt" IS NULL
+        ORDER BY "id"
+        FOR UPDATE
+      `;
       const result = await tx.schoolClass.updateMany({ where: { id, schoolId: teacher.schoolId, isActive: true }, data: { isActive: false } });
       if (!result.count) return false;
       await tx.student.updateMany({ where: { classId: id, isActive: true }, data: { isActive: false } });
+      await tx.faceConsent.updateMany({ where: { classId: id, schoolId: teacher.schoolId, activeStudentId: { not: null }, revokedAt: null }, data: { revokedAt: new Date(), activeStudentId: null } });
+      await tx.studentFaceTemplate.deleteMany({ where: { student: { classId: id } } });
       return true;
     });
     return archived ? NextResponse.json({ ok: true, archived: true }) : jsonError("Class not found.", 404);
